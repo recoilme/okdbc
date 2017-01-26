@@ -10,7 +10,7 @@
 
 #define PORT "8888" // default port
 
-#define LOG_LEVEL 0 // 1 print debug info
+#define LOG_LEVEL 1 // 1 print debug info
 
 #define KEY_MAX_SIZE 1024 // max key size
 
@@ -72,7 +72,7 @@ int get_int_len (int value)
 
 /*
  Request parser
- Test with: ab -n 1000000 -c 200 -k http://127.0.0.1:3000/
+ Test with: ab -n 1000 -c 100 -k http://127.0.0.1:8888/
  */
 static void on_request(http_request_s* request) {
     
