@@ -28,13 +28,13 @@ Test with keep alive connection: ab -n 1000 -c 200 -k http://127.0.0.1:8888/
 Requests per second:    65750.11 - MacBook Pro (Retina, 13-inch, Early 2015)
 
 ## use
-### For set/put new key/value you must send PUT request:
+### For set new value you must send PUT request:
 ```
 curl -X PUT -d "world" http://127.0.0.1:8888/hello
 ```
 This will add key "hello" with value "world"
 
-### For get value by key you must send GET request:
+### For get value you must send GET request:
 ```
 curl http://127.0.0.1:8888/hello
 ```
