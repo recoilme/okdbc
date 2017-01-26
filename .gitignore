@@ -33,3 +33,5 @@
 *.su
 
 .DS_Store
+tmp
+_test
