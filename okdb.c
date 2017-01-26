@@ -6,15 +6,15 @@
 #define THREAD_COUNT 1 // depending on your use-case, you might want more threads.
 
 #undef PROCESS_COUNT // just in case
-#define PROCESS_COUNT 4 // leave one core for the kernel and the ab test tool
+#define PROCESS_COUNT 1 // leave one core for the kernel and the ab test tool
 
 #define PORT "8888" // default port
 
-#define LOG_LEVEL 0 // 1 print debug info
+#define LOG_LEVEL 1 // 1 print debug info
 
 #define KEY_MAX_SIZE 1024 // max key size
 
-#define VALUE_MAX_SIZE 4096 // max value size
+#define VALUE_MAX_SIZE 1024 // max value size
 
 // Behaves similarly to printf(...), but adds file, line, and function
 // information.
@@ -31,29 +31,12 @@ printf(__VA_ARGS__);\
 }
 
 // Constants
-static char msg_200[] =
-"HTTP/1.1 200 OK\r\n"
-"Content-Length: 2\r\n"
-"Connection: keep-alive\r\n"
-"Keep-Alive: 1;timeout=5\r\n"
-"\r\n"
-"OK";
-
-static char msg_400[] =
-"HTTP/1.1 400 Bad Request\r\n"
-"Content-Length: 6\r\n"
-"Connection: keep-alive\r\n"
-"Keep-Alive: 1;timeout=5\r\n"
-"\r\n"
-"NOT OK";
-
-static char msg_fmt[] =
-"HTTP/1.1 200 OK\r\n"
-"Content-Length: %d\r\n"
-"Connection: keep-alive\r\n"
-"Keep-Alive: 1;timeout=5\r\n"
-"\r\n"
-"%s";
+static char err_key[] = "Error: key too large\n";
+static char err_val[] = "Error: value too large\n";
+static char err_noval[] = "Error: no value\n";
+static char err_nokey[] = "Error: key not found\n";
+static char ok[] = "OK\n";
+static char err[] = "Error\n";
 
 // Global vars
 void *env;
@@ -89,30 +72,47 @@ static void on_request(http_request_s* request) {
         INFO_OUT("body_str:%s\n",request->body_str);
         INFO_OUT("content_length:%d\n",(int)request->content_length);
     }
+    // init response from request
+    http_response_s response = http_response_init(request);
     
     // empty or "/" path
     if (request->path_len <= 1) {
-        sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
+        http_response_write_body(&response,
+                           ok, sizeof(ok)-1);
+        http_response_finish(&response);
+        //sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
         return;
     }
     
     // checks length of key
-    if (request->path_len > KEY_MAX_SIZE ) {
-        sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-        ERR_OUT("key too large");
+    if (request->path_len > KEY_MAX_SIZE + 1) {
+        response.status = 400;
+        http_response_write_body(&response,
+                           err_key, sizeof(err_key)-1);
+        //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+        //ERR_OUT("key too large");
+        http_response_finish(&response);
         return;
     }
     
     // set key from path and value from body
     if (!strcmp("PUT",request->method)) {
         if (request->content_length == 0) {
-            sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-            ERR_OUT("no value");
+            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            //ERR_OUT("no value");
+            response.status = 400;
+            http_response_write_body(&response,
+                           err_noval, sizeof(err_noval)-1);
+            http_response_finish(&response);
             return;
         }
         if (request->content_length > VALUE_MAX_SIZE) {
-            sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-            ERR_OUT("value too large");
+            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            //ERR_OUT("value too large");
+            response.status = 400;
+            http_response_write_body(&response,
+                           err_val, sizeof(err_val)-1);
+            http_response_finish(&response);            
             return;
         }
         // delete leading / from path ? is it always present?
@@ -127,11 +127,19 @@ static void on_request(http_request_s* request) {
         request->path--;
         if (result == 0) {
             // succesfuly stored
-            sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
+            //sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
+            http_response_write_body(&response,
+                           ok, sizeof(ok)-1);
+            http_response_finish(&response);            
             return;
         }
         else {
-            sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            response.status = 400;
+            //TODO write sophia error
+            http_response_write_body(&response,
+                           err, sizeof(err)-1);
+            http_response_finish(&response);            
             return;
         }
     }
@@ -153,25 +161,40 @@ static void on_request(http_request_s* request) {
             memcpy(val,ptr,size);
             INFO_OUT("val:'%.*s'\n", size,val);
             
-            int resp_size = (strlen(msg_fmt) -2*2/* %s exclude */) + size + get_int_len(size) + 1/* \0*/;
-            char *resp = malloc(resp_size);
-            snprintf(resp, resp_size,msg_fmt,size,val);
-            INFO_OUT("resp:'%.*s'\n", resp_size,resp);
+            //int resp_size = (strlen(msg_fmt) -2*2/* %s exclude */) + size + get_int_len(size) + 1/* \0*/;
+            //char *resp = malloc(resp_size);
+            //snprintf(resp, resp_size,msg_fmt,size,val);
+            //INFO_OUT("resp:'%.*s'\n", resp_size,resp);
             
-            sock_write(request->metadata.fd, resp, resp_size - 1);
+            //sock_write(request->metadata.fd, resp, resp_size - 1);
+            
+            http_response_write_body(&response,
+                           val, size);
+            http_response_finish(&response); 
+
             free(val);
-            free(resp);
+            //free(resp);
             sp_destroy(o);
             return;
         }
         else {
             INFO_OUT("key not found");
-            sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+            response.status = 404;
+            http_response_write_body(&response,
+                           err_nokey, sizeof(err_nokey)-1);
+            http_response_finish(&response);
+            return;
         }
     }
     
     // not handled request
-    sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+    //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
+    response.status = 400;
+    http_response_write_body(&response,
+                    err, sizeof(err)-1);
+    http_response_finish(&response);
+    return;
 }
 
 /*
