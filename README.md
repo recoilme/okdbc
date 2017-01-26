@@ -10,8 +10,11 @@ Modern transactional key-value/row storage library. http://sophia.systems
 
 ## build & run
 ```
+git clone https://github.com/recoilme/okdb.git
+cd okdb
 git submodule init
 git submodule update
+make clean
 make build
 ./tmp/okdb
 ```

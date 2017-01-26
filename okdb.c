@@ -10,7 +10,7 @@
 
 #define PORT "8888" // default port
 
-#define LOG_LEVEL 1 // 1 print debug info
+#define LOG_LEVEL 0 // 1 print debug info
 
 #define KEY_MAX_SIZE 1024 // max key size
 
