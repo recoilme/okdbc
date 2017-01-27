@@ -6,11 +6,11 @@
 #define THREAD_COUNT 1 // depending on your use-case, you might want more threads.
 
 #undef PROCESS_COUNT // just in case
-#define PROCESS_COUNT 1 // leave one core for the kernel and the ab test tool
+#define PROCESS_COUNT 19 // leave one core for the kernel and the ab test tool
 
 #define PORT "8888" // default port
 
-#define LOG_LEVEL 1 // 1 print debug info
+#define LOG_LEVEL 0 // 1 print debug info
 
 #define KEY_MAX_SIZE 1024 // max key size
 
