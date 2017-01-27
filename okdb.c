@@ -122,7 +122,7 @@ static void on_request(http_request_s* request) {
         else {
             //read from tmp file
             if (request->body_file != 0) {
-                char *buf;
+                char *buf = NULL;
                 if (!malloc(request->content_length)) {
                     response.status = 400;
                     http_response_write_body(&response,
@@ -130,7 +130,7 @@ static void on_request(http_request_s* request) {
                     http_response_finish(&response);            
                     return;
                 }
-                size_t r = read(request->body_file, buf, request->content_length);
+                read(request->body_file, buf, request->content_length);
                 //INFO_OUT("read:%d buf:%s\n",(int)r,buf);
                 sp_setstring(o, "value", &buf[0], (int)request->content_length);
                 free(buf);
