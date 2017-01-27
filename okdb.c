@@ -143,12 +143,13 @@ static void on_request(http_request_s* request) {
                 else {
                     sp_setstring(o, "value", &buf[0], (int)request->content_length);
                 }
-                free(buf);
             }
         }
         
         //set key value in simple trunsaction
         int result = sp_set(db, o);
+        // free buf
+        free(buf);
         // return pointer back
         request->path--;
         if (result == 0) {
