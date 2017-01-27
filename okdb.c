@@ -115,6 +115,7 @@ static void on_request(http_request_s* request) {
         //get body from request
         
         void *o = sp_document(db);
+        char *buf = NULL;
         sp_setstring(o, "key", &request->path[0], (int) (request->path_len - 1));
         if (request->body_str != NULL) {
             sp_setstring(o, "value", &request->body_str[0], (int)request->content_length);
@@ -122,7 +123,6 @@ static void on_request(http_request_s* request) {
         else {
             //read from tmp file
             if (request->body_file != 0) {
-                char *buf = NULL;
                 if (!(buf = malloc(request->content_length))) {
                     response.status = 400;
                     http_response_write_body(&response,
@@ -149,7 +149,9 @@ static void on_request(http_request_s* request) {
         //set key value in simple trunsaction
         int result = sp_set(db, o);
         // free buf
-        free(buf);
+        if (buf) {
+            free(buf);
+        }
         // return pointer back
         request->path--;
         if (result == 0) {
