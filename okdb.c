@@ -14,7 +14,7 @@
 
 #define KEY_MAX_SIZE 1024 // max key size
 
-#define VALUE_MAX_SIZE 1024 // max value size
+#define VALUE_MAX_SIZE 2048 // max value size
 
 // Behaves similarly to printf(...), but adds file, line, and function
 // information.
@@ -70,6 +70,7 @@ static void on_request(http_request_s* request) {
         INFO_OUT("content_type:%s\n",request->content_type);
         INFO_OUT("connection:%s\n",request->connection);
         INFO_OUT("body_str:%s\n",request->body_str);
+        INFO_OUT("body_file:%d\n",request->body_file);
         INFO_OUT("content_length:%d\n",(int)request->content_length);
     }
     // init response from request
@@ -80,7 +81,6 @@ static void on_request(http_request_s* request) {
         http_response_write_body(&response,
                            ok, sizeof(ok)-1);
         http_response_finish(&response);
-        //sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
         return;
     }
     
@@ -89,8 +89,6 @@ static void on_request(http_request_s* request) {
         response.status = 400;
         http_response_write_body(&response,
                            err_key, sizeof(err_key)-1);
-        //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-        //ERR_OUT("key too large");
         http_response_finish(&response);
         return;
     }
@@ -98,17 +96,13 @@ static void on_request(http_request_s* request) {
     // set key from path and value from body
     if (!strcmp("PUT",request->method)) {
         if (request->content_length == 0) {
-            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-            //ERR_OUT("no value");
             response.status = 400;
             http_response_write_body(&response,
                            err_noval, sizeof(err_noval)-1);
             http_response_finish(&response);
             return;
         }
-        if (request->content_length > VALUE_MAX_SIZE) {
-            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
-            //ERR_OUT("value too large");
+        if ((request->content_length > VALUE_MAX_SIZE)) {
             response.status = 400;
             http_response_write_body(&response,
                            err_val, sizeof(err_val)-1);
@@ -118,23 +112,43 @@ static void on_request(http_request_s* request) {
         // delete leading / from path ? is it always present?
         request->path++;
         
+        //get body from request
+        
         void *o = sp_document(db);
         sp_setstring(o, "key", &request->path[0], (int) (request->path_len - 1));
-        sp_setstring(o, "value", &request->body_str[0], (int)request->content_length);
+        if (request->body_str != NULL) {
+            sp_setstring(o, "value", &request->body_str[0], (int)request->content_length);
+        }
+        else {
+            //read from tmp file
+            if (request->body_file != 0) {
+                char *buf;
+                if (!malloc(request->content_length)) {
+                    response.status = 400;
+                    http_response_write_body(&response,
+                                err_val, sizeof(err_val)-1);
+                    http_response_finish(&response);            
+                    return;
+                }
+                size_t r = read(request->body_file, buf, request->content_length);
+                //INFO_OUT("read:%d buf:%s\n",(int)r,buf);
+                sp_setstring(o, "value", &buf[0], (int)request->content_length);
+                free(buf);
+            }
+        }
+        
         //set key value in simple trunsaction
         int result = sp_set(db, o);
         // return pointer back
         request->path--;
         if (result == 0) {
             // succesfuly stored
-            //sock_write(request->metadata.fd, msg_200, sizeof(msg_200) - 1);
             http_response_write_body(&response,
                            ok, sizeof(ok)-1);
             http_response_finish(&response);            
             return;
         }
         else {
-            //sock_write(request->metadata.fd, msg_400, sizeof(msg_400) - 1);
             response.status = 400;
             //TODO write sophia error
             http_response_write_body(&response,
@@ -161,19 +175,11 @@ static void on_request(http_request_s* request) {
             memcpy(val,ptr,size);
             INFO_OUT("val:'%.*s'\n", size,val);
             
-            //int resp_size = (strlen(msg_fmt) -2*2/* %s exclude */) + size + get_int_len(size) + 1/* \0*/;
-            //char *resp = malloc(resp_size);
-            //snprintf(resp, resp_size,msg_fmt,size,val);
-            //INFO_OUT("resp:'%.*s'\n", resp_size,resp);
-            
-            //sock_write(request->metadata.fd, resp, resp_size - 1);
-            
             http_response_write_body(&response,
                            val, size);
             http_response_finish(&response); 
 
             free(val);
-            //free(resp);
             sp_destroy(o);
             return;
         }
