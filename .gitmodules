@@ -1,6 +1,0 @@
-[submodule "deps/facil.io"]
-	path = deps/facil.io
-	url = https://github.com/boazsegev/facil.io.git
-[submodule "deps/sophia"]
-	path = deps/sophia
-	url = https://github.com/pmwkaa/sophia.git
