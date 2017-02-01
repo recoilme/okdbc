@@ -35,3 +35,7 @@
 .DS_Store
 tmp
 _test
+libevent-2.1.8-stable
+okdb
+test/nimcache
+test/test
