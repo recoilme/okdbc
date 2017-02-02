@@ -27,17 +27,16 @@ static char
     "Connection: Keep-Alive\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Keep-Alive: timeout=10, max=20\r\n"
+    "Keep-Alive: timeout=20, max=200\r\n"
     "Server: okdb/0.0.1\r\n"
     "\r\n%s";
 
 static char 
 *msg_notfound =
     "HTTP/1.1 404 Not Found\r\n"
-    "Connection: Keep-Alive\r\n"
+    "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Connection: close"
     "Server: okdb/0.0.1\r\n"
     "\r\n%s";
 
