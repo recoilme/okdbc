@@ -92,6 +92,9 @@ clean:
 	-@rm -rf $(BIN)
 	-@rm -rf $(TMP_ROOT)
 	-@mkdir -p $(BUILDTREE)
+asrv:
+	-@rm async
+	gcc -o asyncsrv asyncsrv.c -lpthread -levent -I/usr/local/include -L/usr/local/lib
 
 execute:
 	@$(BIN)

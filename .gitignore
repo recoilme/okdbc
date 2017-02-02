@@ -34,7 +34,9 @@
 
 .DS_Store
 tmp
+asyncsrv
 _test
+db
 libevent-2.1.8-stable
 okdb
 test/nimcache
