@@ -1,8 +1,16 @@
-# Install libevent
+# okdb
+A fast, light-weight key/value store with http & memcache interface.
 
-Usefull link: https://github.com/libevent/libevent
+okdb implements a high-level cross-platform sockets interface to sophia db.
 
-Example for mac os, without openSSL
+okdb is fast, effective and simple.
+
+## dependencies
+### Sophia - modern transactional key-value/row storage library: http://sophia.systems
+Sophia included as amalgamation build (version 2.2).
+
+### Libevent - an event notification library: http://libevent.org/
+Example how to build libevent 2.1.8 for mac os, without openSSL
 
 ```
 wget https://github.com/libevent/libevent/releases/download/release-2.1.8-stable/libevent-2.1.8-stable.tar.gz
@@ -11,20 +19,58 @@ cd libevent-2.1.8-stable
 ./configure --disable-openssl
 make
 sudo make install
+``` 
+
+## build & run
+```
+git clone https://github.com/recoilme/okdb.git
+cd okdb
+make
+./okdb 11213 >> error.log &
 ```
 
-```
-cc test.c commands.c -o test && ./test
-gcc -o pudge pudge.c shared.c sophia.c server.c workqueue.c commands.c -levent -lpthread -L/usr/local/Cellar/libevent/HEAD-3821cca/lib -I/usr/local/Cellar/libevent/HEAD-3821cca/include && ./pudge
-gcc -o pudge pudge.c sophia.c server.c workqueue.c commands.c -levent -lpthread -L/home/vkulibaba/libevent-2.0.22-stable/.libs -I/home/vkulibaba/libevent-2.0.22-stable/include/
+## run
+Open http://localhost:11213/ and you must see "OK" message.
 
-printf "set key 0 0 3\r\nval\r\n" | nc 127.0.0.1 5555
+## status
+In development
 
-https://github.com/recoilme/cliserver/blob/master/cliserver.c
-https://github.com/recoilme/hashtable/blob/master/src/server.c
-https://github.com/pmwkaa/sophia
-https://github.com/recoilme/GoHttp/blob/master/GoHttp.c
-https://github.com/recoilme/sandbird/blob/master/src/sandbird.c
-http://www.wangafu.net/~nickm/libevent-2.0/doxygen/html/buffer_8h.html
-https://github.com/memcached/memcached/blob/master/doc/protocol.txt
+## test
+Test with keep alive connection: ab -n 1000 -c 200 -k http://127.0.0.1:11213/
+
+Requests per second:    65750.11 - MacBook Pro (Retina, 13-inch, Early 2015)
+
+## memcache interface
+
+okdb partialy support text based memcache protocol.
+
+Supported commands:
+    get
+    set
+    quit
+
+Example:
 ```
+telnet localhost 11213
+set key 0 0 5
+value
+>STORED
+get key
+>VALUE hello 0 5
+world
+END
+quit
+```
+## http interface
+### For set new value you must send PUT request:
+```
+//in development
+curl -X PUT -d "world" http://127.0.0.1:11213/hello
+```
+This will add key "hello" with value "world"
+
+### For get value you must send GET request:
+```
+curl http://127.0.0.1:11213/hello
+```
+You will see "world"
