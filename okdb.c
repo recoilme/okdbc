@@ -247,7 +247,7 @@ CONTINUE_LOOP:;
 
         /* We know value size, check buffer */
         int total_size = cmd_len+val_size+(sizeof(nl)-1);
-        if (len<total_size) {
+		if ((int)len<total_size) {
             /* buf not arrived, wait */
             free(data);
             free(key);
@@ -471,7 +471,7 @@ run_server(int argc, char **argv)
     struct evconnlistener *listener;
     struct sockaddr_in sin;
 
-    int port = 9876;
+    int port = 11213;
 
     if (argc > 1) {
         port = atoi(argv[1]);
