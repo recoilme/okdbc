@@ -514,7 +514,7 @@ static int
 init() {
 	/* open or create environment and database */
     env = sp_env();
-	sp_setstring(env, "sophia.path", "db", 0);
+	sp_setstring(env, "sophia.path", "sophia", 0);
 	sp_setstring(env, "db", "db", 0);
     /* set mmap mode */
 	sp_setint(env, "db.db.mmap", 1);
