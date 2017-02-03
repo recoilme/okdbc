@@ -504,6 +504,7 @@ run_server(int argc, char **argv)
         perror("Couldn't create listener");
         return 1;
     }
+	printf("%s",ok);
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
     event_base_dispatch(base);

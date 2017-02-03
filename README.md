@@ -6,10 +6,14 @@ okdb implements a high-level cross-platform sockets interface to sophia db.
 okdb is fast, effective and simple.
 
 ## dependencies
-### Sophia - modern transactional key-value/row storage library: http://sophia.systems
+### Sophia - modern transactional key-value/row storage library: 
+http://sophia.systems
+
 Sophia included as amalgamation build (version 2.2).
 
-### Libevent - an event notification library: http://libevent.org/
+### Libevent - an event notification library: 
+http://libevent.org/
+
 Example how to build libevent 2.1.8 for mac os, without openSSL
 
 ```
@@ -25,8 +29,10 @@ sudo make install
 ```
 git clone https://github.com/recoilme/okdb.git
 cd okdb
-make
-./okdb 11213 >> error.log &
+make build
+./okdb 
+with custom port:
+./okdb 9876 >> error.log &
 ```
 
 ## run
@@ -38,7 +44,7 @@ In development
 ## test
 Test with keep alive connection: ab -n 1000 -c 200 -k http://127.0.0.1:11213/
 
-Requests per second:    65750.11 - MacBook Pro (Retina, 13-inch, Early 2015)
+Requests per second:    29836.50 - MacBook Pro (Retina, 13-inch, Early 2015)
 
 ## memcache interface
 

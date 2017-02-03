@@ -11,17 +11,18 @@ import
 {.experimental.}
 
 const NL = chr(13) & chr(10)
+const port = 11213
 
 proc newTaskAsync(task:int) = 
-  var socket = newClient("127.0.0.1",5555)
+  var socket = newClient("127.0.0.1",port)
   let start = task * 10 + 1
   let endd = start + 9
-  echo $start," :",$endd
+  #echo $start," :",$endd
   randomize()
   for i in start..endd:
     let rnd = random(100_000)+1
     let res = socket.get($rnd)
-    echo "key:" & $rnd & "val:" & res
+    #echo "key:" & $rnd & "val:" & res
     if (res != $rnd):
       echo "val:" & res & " != " & $rnd
       break
@@ -54,7 +55,7 @@ suite "test suite for pudge":
   
   test "insert:":
     var
-      client = newClient("127.0.0.1",5555)
+      client = newClient("127.0.0.1",port)
       key:string = nil
       val:string = nil
       res:bool
@@ -78,7 +79,7 @@ suite "test suite for pudge":
 
   test "read":
     var
-      client = newClient("127.0.0.1",5555)
+      client = newClient("127.0.0.1",port)
       key:string = nil
       val:string = nil
       t = toSeconds(getTime())
