@@ -11,6 +11,7 @@
 
 #include "sophia.h"
 
+#define MAX_QUERY_PARAM_CNT 3
 const int LOGENABLED = 1;
 
 void *env;
@@ -72,6 +73,19 @@ ok[] = "OK\r\n";
 
 static char 
 not_found[] = "Not Found\r\n";
+
+/* A struct to hold the query string parameter values. */
+struct query_param {
+	char *key;
+	char *val;
+};
+
+/* A struct to hold commands from query. */
+struct command {
+    char *type;
+    char *prefix;
+    int limit;
+};
 
 /*  Str must have at least len bytes to copy 
     Return NULL on error malloc
@@ -145,9 +159,81 @@ mc_get_response(struct evbuffer *output, const char *key,const char *value, int 
     return;
 }
 
+/* 
+stealed from here: https://github.com/jacketizer/libyuarel/blob/master/yuarel.c#L160
+*/
+static int
+parse_query(char *query, char delimiter, struct query_param *params, int max_params)
+{
+	int i = 0;
+
+	if (query == NULL || *query == '\0')
+		return -1;
+
+	params[i++].key = query;
+	while (i < max_params && NULL != (query = strchr(query, delimiter))) {
+		*query = '\0';
+		params[i].key = ++query;
+		params[i].val = NULL;
+		
+		/* Go back and split previous param */
+		if (i > 0) {
+			if ((params[i - 1].val = strchr(params[i - 1].key, '=')) != NULL)
+				*(params[i - 1].val)++ = '\0';
+		}
+		i++;
+	}
+
+	/* Go back and split last param */
+	if ((params[i - 1].val = strchr(params[i - 1].key, '=')) != NULL)
+		*(params[i - 1].val)++ = '\0';
+
+	return i;
+}
+
 static char
 *sophia_get(const char *key, int *value_size)
 {
+	char *query = strstr(key,"?");
+	if (query) {
+		query++;
+		int p;
+		struct query_param param[MAX_QUERY_PARAM_CNT] = {{0}};
+        p = parse_query(query,'&', param, MAX_QUERY_PARAM_CNT);
+        struct command cmd = {0};
+        while (p-- > 0) {
+            //INFO("\t%s: %s\n", param[p].key, param[p].val);
+            if (!strcmp("type",param[p].key)) cmd.type = param[p].val;
+            if (!strcmp("prefix",param[p].key)) cmd.prefix = param[p].val; 
+            if (!strcmp("limit",param[p].key)) {
+                cmd.limit = (int) strtol(param[p].val,NULL,10);
+            }
+        }
+        //INFO("'%s'\t'%s' %d",cmd.type,cmd.prefix,cmd.limit);
+        //INFO("r:%d",strcmp("cursor",cmd.type));
+        if (1==1) {
+            //INFO("2");
+            void *o = sp_document(db);
+            //INFO("3");
+            //sp_setstring(o, "order", "<=", 0);
+            char *prefix = make_str(cmd.prefix,strlen(cmd.prefix));
+            if (cmd.prefix){
+                /* if prefix not set - will scan all db */
+                sp_setstring(o, "prefix", prefix, strlen(prefix));
+                //INFO("4");
+            }
+            free(prefix);
+            //INFO("5\n");
+            void *c = sp_cursor(env);
+            while( (o = sp_get(c, o)) ) {
+
+                char *val = (char*)sp_getstring(o, "key", NULL);
+                printf("val:%s",val);
+            }
+            printf("end cursor\n");
+        }
+        return NULL;
+	}
     /* get value from sophia */
     char *val = NULL;
 
@@ -523,9 +609,16 @@ init() {
     return sp_open(env);
 }
 
+static void
+test()
+{
+	
+}
+
 int
 main(int argc, char **argv)
 {
+	test();
 	if (init() == -1)
 		goto error;
 
