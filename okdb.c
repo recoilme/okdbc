@@ -209,28 +209,34 @@ static char
                 cmd.limit = (int) strtol(param[p].val,NULL,10);
             }
         }
-        //INFO("'%s'\t'%s' %d",cmd.type,cmd.prefix,cmd.limit);
-        //INFO("r:%d",strcmp("cursor",cmd.type));
-        if (1==1) {
-            //INFO("2");
+        if (!strcmp("cursor",cmd.type)) {
             void *o = sp_document(db);
-            //INFO("3");
-            //sp_setstring(o, "order", "<=", 0);
-            char *prefix = make_str(cmd.prefix,strlen(cmd.prefix));
+            int res = sp_setstring(o, "order", ">=", 0);
             if (cmd.prefix){
                 /* if prefix not set - will scan all db */
+                char *prefix = make_str(cmd.prefix,strlen(cmd.prefix));
                 sp_setstring(o, "prefix", prefix, strlen(prefix));
-                //INFO("4");
+                free(prefix);
             }
-            free(prefix);
-            //INFO("5\n");
+            /*
+            segfault
+            get ?type=cursor&limit=2
+            END
+            b^H^Z
+            get ?type=cursor
+            */
             void *c = sp_cursor(env);
+            /* Default limit - 100 */
+            int limit = cmd.limit==0?100:cmd.limit;
             while( (o = sp_get(c, o)) ) {
-
+                if (!limit) break;
                 char *val = (char*)sp_getstring(o, "key", NULL);
-                printf("val:%s",val);
+                INFO("val:%s",val);
+                limit--;
             }
-            printf("end cursor\n");
+            if (o) free(o);
+            free(c);
+            INFO("end cursor\n");
         }
         return NULL;
 	}
