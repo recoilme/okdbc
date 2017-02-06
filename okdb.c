@@ -123,42 +123,6 @@ close_connection(struct bufferevent *bev, void *ctx, const char *err)
     bufferevent_free(bev);
 }
 
-static void
-http_get_response(struct evbuffer *output, const char *format, const char *msg, int size)
-{
-    //INFO("msg:%s",msg);
-    if (!msg) return;
-    int resp_size = ((strlen(format)) -2*2/* % exclude */) + size + get_int_len(size) +1;
-    //INFO("http_get_response size:%d", resp_size);        
-    char *resp = malloc(resp_size);
-    resp[resp_size] = '\0';
-    snprintf(resp, resp_size, format, size, msg);
-    //INFO("http_get_response:'%s' size:%d",resp, resp_size);
-    evbuffer_add(output, resp, resp_size-1);
-    free(resp);
-}
-
-static void
-mc_get_response(struct evbuffer *output, const char *key,const char *value, int size)
-{
-    if (!value) {
-        evbuffer_add(output, st_end, sizeof(st_end)-1);
-        return;
-    }
-    char *format = "VALUE %s 0 %d\r\n%s\r\nEND\r\n";
-    int resp_size = (strlen(format) -3*2) + strlen(key) + size + get_int_len(size) + 1;
-    char *resp = malloc(resp_size);
-    if (!resp) {
-        perror("Out of memory");
-        //TODO close connection or ignore?
-        return;
-    }
-    snprintf(resp, resp_size,format,key,size,value);
-    INFO("resp:'%.*s'\n", resp_size,resp);
-    evbuffer_add(output, resp, resp_size-1);//remove \0
-    return;
-}
-
 /* 
 stealed from here: https://github.com/jacketizer/libyuarel/blob/master/yuarel.c#L160
 */
@@ -191,11 +155,53 @@ parse_query(char *query, char delimiter, struct query_param *params, int max_par
 	return i;
 }
 
-static char
-*sophia_get(const char *key, int *value_size)
+static void
+http_out(struct evbuffer *output, const char *format, const char *msg, int size)
 {
-	char *query = strstr(key,"?");
+    //INFO("msg:%s",msg);
+    if (!msg) return;
+    int resp_size = (strlen(format) -2*2/* % exclude */) + size + get_int_len(size)+1;
+    //INFO("http_get_response size:%d", resp_size);        
+    char *resp = malloc(resp_size);
+    if (!resp) {
+        perror("Out of memory");
+        return;
+    }
+    resp[resp_size-1] = '\0';
+    snprintf(resp, resp_size, format, size, msg);
+    //INFO("http_get_response:'%s' size:%d",resp, resp_size);
+    evbuffer_add(output, resp, resp_size-1);
+    free(resp);
+}
+
+
+static void
+memcache_out(struct evbuffer *output, const char *key,const char *value, int size)
+{
+    if (!value) {
+        return;
+    }
+    char *format = "VALUE %s 0 %d\r\n%s\r\n";
+    int resp_size = (strlen(format) -3*2) + strlen(key) + size + get_int_len(size) + 1;
+    char *resp = malloc(resp_size);
+    if (!resp) {
+        perror("Out of memory");
+        return;
+    }
+    resp[resp_size-1] = '\0';
+    snprintf(resp, resp_size,format,key,size,value);
+    INFO("resp:'%.*s' resp_size:%d\n", resp_size,resp, resp_size);
+    evbuffer_add(output, resp, resp_size-1);//remove \0
+    return;
+}
+
+
+static void
+get_val(struct evbuffer *output, const char *key, int is_http)
+{
+    char *query = strstr(key,"?");
 	if (query) {
+        /* Parse query like: ?type=cursor&limit=2 */
 		query++;
 		int p;
 		struct query_param param[MAX_QUERY_PARAM_CNT] = {{0}};
@@ -218,46 +224,63 @@ static char
                 sp_setstring(o, "prefix", prefix, strlen(prefix));
                 free(prefix);
             }
-            /*
-            segfault
-            get ?type=cursor&limit=2
-            END
-            b^H^Z
-            get ?type=cursor
-            */
             void *c = sp_cursor(env);
             /* Default limit - 100 */
             int limit = cmd.limit==0?100:cmd.limit;
+            int value_size;
+            int key_size;
             while( (o = sp_get(c, o)) ) {
-                if (!limit) break;
-                char *val = (char*)sp_getstring(o, "key", NULL);
-                INFO("val:%s",val);
+                if (!limit) {
+                    sp_destroy(o);
+                    break;
+                }
+                char *ptr_key = (char*)sp_getstring(o, "key", &key_size);
+                char *new_key = make_str(ptr_key,key_size);
+                char *ptr_val = (char*)sp_getstring(o, "value", &value_size);
+                char *value = make_str(ptr_val,value_size);
+                if (is_http == 0) memcache_out(output,new_key,value,value_size);
+                INFO("key:%s\tval:%s",new_key,value);
+                free(new_key);
+                free(value);
                 limit--;
             }
-            if (o) free(o);
-            free(c);
+            sp_destroy(c);
+            if (is_http == 0) evbuffer_add(output, st_end, sizeof(st_end)-1);
             INFO("end cursor\n");
         }
-        return NULL;
+        return;
 	}
     /* get value from sophia */
-    char *val = NULL;
+    int value_size;
 
     void *o = sp_document(db);
     sp_setstring(o, "key", &key[0], strlen(key));
     o = sp_get(db, o);
     
     if (o) {
-        char *ptr = sp_getstring(o, "value", value_size);
-        val = make_str((char*)ptr,*value_size);
+        char *ptr = sp_getstring(o, "value", &value_size);
+        char *value = make_str((char*)ptr,value_size);
+        INFO("Val:%s",value);
         sp_destroy(o);
-
-        INFO("val:'%.*s', size:%d\n", *value_size,val,*value_size);
+        if (is_http == 0) {
+            memcache_out(output,key,value,value_size);
+        }
+        else {
+            http_out(output,msg_ok,value,value_size);
+        }
+        INFO("val:'%.*s', size:%d\n", value_size,value,value_size);
+        free(value);
     }
     else {
+        if (is_http == 1){
+            http_out(output,msg_notfound,not_found,strlen(not_found));
+        }
         INFO("key:'%s' not found\n",key);
     }
-    return val;
+    if (is_http == 0) {
+        evbuffer_add(output, st_end, sizeof(st_end)-1);
+    }
+    return;
 }
 
 static void
@@ -426,16 +449,17 @@ CONTINUE_LOOP:;
         INFO("key:'%s'\n", key);
 
         /* Processing key */
-        int value_size;
-        char *value = sophia_get(key,&value_size);
-        
-        mc_get_response(output,key,value,value_size);
-        if (value) {
-            free(value);
+        get_val(output, key, 0);
+
+        /* command catched - send response */
+        if (bufferevent_write_buffer(bev, output)) {
+            INFO("error send");
+            free(key);
+            free(data);
+            close_connection(bev, ctx, "Error sending data to client");
+            return;
         }
-
         free(key);
-
         free(data);
         /* client may send multiple commands in one buffer so continue processing */
         goto CONTINUE_LOOP;
@@ -483,24 +507,14 @@ CONTINUE_LOOP:;
         INFO("key:'%s'\n", key);
         if (!strcmp("",key)) {
             INFO("Send 200 resp");
-            http_get_response(output,msg_ok,ok,strlen(ok));
+            http_out(output,msg_ok,ok,strlen(ok));
         }
         else {
             /* We have key in request */
             if (!strcmp("favicon.ico",key)) {
                 INFO("request:favicon.ico");
             }
-            int value_size;
-            char *value = sophia_get(key,&value_size);
-            INFO("Send value resp");
-            if (value) {
-                http_get_response(output,msg_ok,value,value_size);
-                free(value);
-            }
-            else {
-                //not found
-                http_get_response(output,msg_notfound,not_found,strlen(not_found));
-            }
+            get_val(output,key,1);
         }
         free(key);
 
