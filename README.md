@@ -76,8 +76,9 @@ See demo
 
 ![demo](https://github.com/recoilme/okdb/blob/master/ok.gif?raw=true)
 
-## description memcache protocol
+## short description text memcache protocol
 
+#### set
 ```
 set [key] 0 0 [sizeof(value)]
 value
@@ -90,6 +91,7 @@ where
 - sizeof(value) - size of value in bytes (without zero terminate byte)
 - response: STORED\r\n or NOT_STORED\r\n
 
+#### get
 ```
 get [key]
 ```
@@ -104,16 +106,16 @@ where
 - value - name of key
 - 5 - sizeof(value) - in bytes
 
-multiple get
-
+#### cursor
+```
 get ?type=cursor&prefix=key&limit=1
-
+```
 where
 - type=cursor - start iterator
-- prefix - key prefix (will return) - default empty
+- prefix - key prefix - default empty("")
 - limit - limit result - default 100
 
-It will return keys/values in descending order (for same sizes keys)
+It will return keys/values >= prefix in descending order (for same sizes keys)
 
 For example you have keys:
 ```
@@ -123,7 +125,7 @@ r:101:100
 r:102:9
 r:1000:1
 ```
-For query 'get ?type=cursor&prefix=r:10', output key will be: 
+For query 'get ?type=cursor&prefix=r:10', output keys will be: 
 ```
 r:102:9
 r:101:100
@@ -131,16 +133,34 @@ r:100:123
 r:1000:1
 ```
 
-quit - terminate session
+#### quit
 
+quit\r\n - terminate session and close connection
 
 
 ## http interface (in development)
 
-### For get value you must send GET request:
+#### For get value you must send GET request:
 ```
 curl http://127.0.0.1:11213/hello
 ```
-You will see "world" or and stus 200 or NOT_FOUND and status 404 if not found
+You will see "world" or and status 200 or NOT_FOUND and status 404 if not found
 
-Main page response is: OK\r\n
+Example response:
+```
+GET /key
+
+HTTP/1.1 200 OK
+Connection: Keep-Alive
+Content-Type: text/html; charset=UTF-8
+Content-Length: 5
+Keep-Alive: timeout=20, max=200
+Server: okdb/0.0.1
+
+value
+```
+Http send keep-Alive header
+
+Main page response is: 
+
+OK\r\n
