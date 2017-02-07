@@ -260,3 +260,46 @@ Transfer/sec:      9.85MB
 100.00% <= 5 milliseconds
 56191.01 requests per second
 ```
+
+Similar benchmark for memcached (memcache store data in memory, so it's more fast then okdb)
+
+```
+./mc-benchmark -h 127.0.0.1 -p 11211 -c 100 -n 10000 -k 1
+====== SET ======
+  10011 requests completed in 0.14 seconds
+  100 parallel clients
+  3 bytes payload
+  keep alive: 1
+
+0.75% <= 0 milliseconds
+64.30% <= 1 milliseconds
+96.04% <= 2 milliseconds
+99.19% <= 3 milliseconds
+99.93% <= 4 milliseconds
+100.00% <= 5 milliseconds
+69520.84 requests per second
+
+====== GET ======
+  10010 requests completed in 0.19 seconds
+  100 parallel clients
+  3 bytes payload
+  keep alive: 1
+
+0.37% <= 0 milliseconds
+37.61% <= 1 milliseconds
+90.40% <= 2 milliseconds
+97.15% <= 3 milliseconds
+99.38% <= 4 milliseconds
+99.66% <= 5 milliseconds
+99.74% <= 6 milliseconds
+99.78% <= 7 milliseconds
+99.81% <= 8 milliseconds
+99.85% <= 9 milliseconds
+99.86% <= 10 milliseconds
+99.89% <= 11 milliseconds
+99.91% <= 12 milliseconds
+99.93% <= 13 milliseconds
+99.97% <= 14 milliseconds
+100.00% <= 15 milliseconds
+53244.68 requests per second
+```
