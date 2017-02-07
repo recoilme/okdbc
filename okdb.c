@@ -12,7 +12,7 @@
 #include "sophia.h"
 
 #define MAX_QUERY_PARAM_CNT 3
-const int LOGENABLED = 1;
+const int LOGENABLED = 0;
 
 void *env;
 void *db;
