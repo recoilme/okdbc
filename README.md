@@ -139,7 +139,7 @@ quit\r\n - terminate session and close connection
 ```
 curl http://127.0.0.1:11213/hello
 ```
-You will see "world" or and status 200 or NOT_FOUND and status 404 if not found
+You will see value and status 200 or NOT_FOUND and status 404
 
 Example response:
 ```
