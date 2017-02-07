@@ -617,12 +617,17 @@ run_server(int argc, char **argv)
     return 0;
 }
 
+
 static int 
 init() {
 	/* open or create environment and database */
     env = sp_env();
 	sp_setstring(env, "sophia.path", "sophia", 0);
 	sp_setstring(env, "db", "db", 0);
+    sp_setstring(env, "db.db.scheme", "key", 0);
+    sp_setstring(env, "db.db.scheme.key", "string_rev,key(0)", 0);
+    sp_setstring(env, "db.db.scheme", "value", 0);
+    sp_setstring(env, "db.db.scheme.value", "string", 0);
     /* set mmap mode */
 	sp_setint(env, "db.db.mmap", 1);
 	db = sp_getobject(env, "db.db");
