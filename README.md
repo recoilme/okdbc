@@ -5,6 +5,8 @@ okdb implements a high-level cross-platform sockets interface to sophia db.
 
 okdb is fast, effective and simple.
 
+![demo](https://github.com/recoilme/okdb/blob/master/ok.gif?raw=true)
+
 ## dependencies
 ### Sophia - modern transactional key-value/row storage library: 
 http://sophia.systems

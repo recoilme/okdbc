@@ -39,3 +39,4 @@ okdb
 test/nimcache
 test/test
 error.log
+ok.log
