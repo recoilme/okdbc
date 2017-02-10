@@ -10,8 +10,8 @@
 /* amalgamation build
  *
  * version:     2.2
- * build:       46d0c12
- * build date:  Tue Feb  7 13:03:16 MSK 2017
+ * build:       59843f5
+ * build date:  Thu Feb  9 12:23:19 MSK 2017
  *
  * compilation:
  * cc -O2 -DNDEBUG -std=c99 -pedantic -Wall -Wextra -pthread -c sophia.c
@@ -19,7 +19,7 @@
 
 /* {{{ */
 
-#define SOPHIA_BUILD "46d0c12"
+#define SOPHIA_BUILD "59843f5"
 
 #line 1 "sophia/std/ss_posix.h"
 #ifndef SS_POSIX_H_
@@ -1323,6 +1323,7 @@ sscrcf ss_crc32c_function(void);
 typedef enum {
 	SS_UNDEF,
 	SS_STRING,
+	SS_STRINGREV,
 	SS_STRINGPTR,
 	SS_U8,
 	SS_U8REV,
@@ -1342,6 +1343,7 @@ ss_typeof(sstype type) {
 	switch (type) {
 	case SS_UNDEF:     return "undef";
 	case SS_STRING:    return "string";
+	case SS_STRINGREV: return "stringrev";
 	case SS_STRINGPTR: return "stringptr";
 	case SS_U8:        return "u8";
 	case SS_U8REV:     return "u8rev";
@@ -13737,6 +13739,15 @@ sf_limitapply(sflimit *b, sfscheme *s, sfv *fields, ssorder order)
 				v->size = b->string_min_size;
 			}
 			break;
+		case SS_STRINGREV:
+			if (order == SS_LT || order == SS_LTE) {
+				v->pointer = b->string_min;
+				v->size = b->string_min_size;
+			} else {
+				v->pointer = b->string_max;
+				v->size = b->string_max_size;
+			}
+			break;
 		default: assert(0);
 			break;
 		}
@@ -13855,6 +13866,7 @@ sf_cmpstring_reverse(char *a, int asz, char *b, int bsz, void *arg ssunused)
 	if (ssunlikely(rc == 0)) {
 		if (sslikely(asz == bsz))
 			return 0;
+		//TODO reverse for compare with prefix?
 		return (asz < bsz) ? -1 : 1;
 	}
 	return rc > 0 ? -1 : 1;
@@ -14035,7 +14047,7 @@ sf_schemeset(sfscheme *s, sffield *f, char *opt)
 		f->cmp = sf_cmpstring;
 	} else
 	if (strcmp(opt, "string_rev") == 0) {
-		f->type = SS_STRING;
+		f->type = SS_STRINGREV;
 		f->fixed_size = 0;
 		f->cmp = sf_cmpstring_reverse;
 	} else
@@ -28968,7 +28980,7 @@ int se_document_createkey(sedocument *o)
 
 	/* set prefix */
 	if (o->prefix) {
-		if (db->scheme->scheme.keys[0]->type != SS_STRING)
+		if (db->scheme->scheme.keys[0]->type != SS_STRING && db->scheme->scheme.keys[0]->type != SS_STRINGREV)
 			return sr_error(&e->error, "%s", "prefix search is only "
 			                "supported for a string key");
 		void *copy = ss_malloc(&e->a, o->prefix_size);

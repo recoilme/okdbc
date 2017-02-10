@@ -11,8 +11,8 @@
 
 #include "sophia.h"
 
-#define MAX_QUERY_PARAM_CNT 3
-const int LOGENABLED = 0;
+#define MAX_QUERY_PARAM_CNT 4
+const int LOGENABLED = 1;
 
 void *env;
 void *db;
@@ -22,6 +22,11 @@ void *db;
 	if (LOGENABLED == 1) printf(__VA_ARGS__);\
 }
 
+#define ERROR(...) {\
+	printf("\n%s:%d: %s():\t", __FILE__, __LINE__, __FUNCTION__);\
+	printf(__VA_ARGS__);\
+}
+
 static char 
 *msg_ok =
     "HTTP/1.1 200 OK\r\n"
@@ -29,7 +34,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.1\r\n"
+    "Server: okdb/0.0.2\r\n"
     "\r\n%s";
 
 static char 
@@ -38,7 +43,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.1\r\n"
+    "Server: okdb/0.0.2\r\n"
     "\r\n%s";
 
 static char
@@ -84,6 +89,9 @@ struct query_param {
 struct command {
     char *type;
     char *prefix;
+    char *command;
+    char *key;
+    char *value;
     int limit;
 };
 
@@ -123,6 +131,14 @@ close_connection(struct bufferevent *bev, void *ctx, const char *err)
     bufferevent_free(bev);
 }
 
+static void
+print_error()
+{
+    int size;
+	char *error = sp_getstring(env, "sophia.error", &size);
+	ERROR("%s",error);
+    free(error);
+}
 /* 
 stealed from here: https://github.com/jacketizer/libyuarel/blob/master/yuarel.c#L160
 */
@@ -208,25 +224,38 @@ get_val(struct evbuffer *output, const char *key, int is_http)
         p = parse_query(query,'&', param, MAX_QUERY_PARAM_CNT);
         struct command cmd = {0};
         while (p-- > 0) {
-            //INFO("\t%s: %s\n", param[p].key, param[p].val);
+            INFO("\t%s: %s\n", param[p].key, param[p].val);
             if (!strcmp("type",param[p].key)) cmd.type = param[p].val;
             if (!strcmp("prefix",param[p].key)) cmd.prefix = param[p].val; 
             if (!strcmp("limit",param[p].key)) {
                 cmd.limit = (int) strtol(param[p].val,NULL,10);
             }
+            if (!strcmp("command",param[p].key)) cmd.command = param[p].val;
+            if (!strcmp("key",param[p].key)) cmd.key = param[p].val;
+            if (!strcmp("value",param[p].key)) cmd.value = param[p].val;
         }
+        if (!cmd.type) {
+            /* Unknown type */
+            if (is_http == 0) evbuffer_add(output, st_end, sizeof(st_end)-1);
+            return;
+        }
+        INFO("processing");
         if (!strcmp("cursor",cmd.type)) {
             void *o = sp_document(db);
-            int res = sp_setstring(o, "order", ">=", 0);
+            //int res = sp_setstring(o, "order", ">=", 0);
             if (cmd.prefix){
                 /* if prefix not set - will scan all db */
+                sp_setstring(o, "order", ">=", 0);
                 char *prefix = make_str(cmd.prefix,strlen(cmd.prefix));
                 sp_setstring(o, "prefix", prefix, strlen(prefix));
                 free(prefix);
             }
+            else {
+                sp_setstring(o, "order", ">=", 0);
+            }
             void *c = sp_cursor(env);
             /* Default limit - 100 */
-            int limit = cmd.limit==0?100:cmd.limit;
+            int limit = (cmd.limit==0)?100:cmd.limit;
             int value_size;
             int key_size;
             while( (o = sp_get(c, o)) ) {
@@ -247,6 +276,70 @@ get_val(struct evbuffer *output, const char *key, int is_http)
             sp_destroy(c);
             if (is_http == 0) evbuffer_add(output, st_end, sizeof(st_end)-1);
             INFO("end cursor\n");
+        }
+        if (!strcmp("sophia",cmd.type) && cmd.command && cmd.key) {
+            /* Process sophia command */
+
+            INFO("Process %s sophia command",cmd.command);
+            if (!strcmp("getstring",cmd.command)) {
+                
+                int value_size;
+                char *new_key = make_str(cmd.key,strlen(cmd.key));
+                if (new_key) {
+                    char *ptr_key = (char*) sp_getstring(env,new_key,&value_size);
+                    if (ptr_key) {
+                        if (is_http == 0) memcache_out(output,new_key,ptr_key,value_size);
+                        free(ptr_key);
+                    }
+                    free(new_key);
+                }
+            }
+
+            if (!strcmp("getint",cmd.command)) {
+                
+                char *new_key = make_str(cmd.key,strlen(cmd.key));
+                if (new_key) {
+                    int64_t val = sp_getint(env,new_key);
+                    char buf[128];
+                    memset(buf, 0x00, 128);
+                    sprintf(buf, "%lld", val);
+                    if (is_http == 0) memcache_out(output,new_key,buf,strlen(buf));
+                    free(new_key);
+                }
+            }
+
+            if (!strcmp("setint",cmd.command)) {
+                /* ?type=sophia&command=setint&key=backup.run&value=0 */
+                char *new_key = make_str(cmd.key,strlen(cmd.key));
+                if (new_key) {                      
+                    int64_t val = cmd.value?strtol(cmd.value,NULL,10):0;
+                    int result = sp_setint(env,new_key,val);
+                    if (result == -1) print_error();
+                    char buf[128];
+                    memset(buf, 0x00, 128);
+                    sprintf(buf, "%d", result);
+                    if (is_http == 0) memcache_out(output,new_key,buf,strlen(buf));
+                    free(new_key);
+                }
+            }
+
+            if (!strcmp("setstring",cmd.command)) {
+                
+                char *new_key = make_str(cmd.key,strlen(cmd.key));
+                if (new_key && cmd.value) { 
+                    char *val = make_str(cmd.value,strlen(cmd.value)); 
+                    int result = sp_setstring(env,new_key,val,strlen(val));
+                    if (result == -1) print_error();
+                    char buf[128];
+                    memset(buf, 0x00, 128);
+                    sprintf(buf, "%d", result);
+                    if (is_http == 0) memcache_out(output,new_key,buf,strlen(buf));
+                    free(new_key);
+                    free(val);
+                }
+            }
+
+            if (is_http == 0) evbuffer_add(output, st_end, sizeof(st_end)-1);
         }
         return;
 	}
@@ -450,7 +543,8 @@ CONTINUE_LOOP:;
 
         /* Processing key */
         get_val(output, key, 0);
-
+        size_t lenout = evbuffer_get_length(output);
+        INFO("out%d\n",(int)lenout);
         /* command catched - send response */
         if (bufferevent_write_buffer(bev, output)) {
             INFO("error send");
@@ -623,6 +717,7 @@ init() {
 	/* open or create environment and database */
     env = sp_env();
 	sp_setstring(env, "sophia.path", "sophia", 0);
+    sp_setstring(env, "backup.path", "sophia/backup", 0);
 	sp_setstring(env, "db", "db", 0);
     sp_setstring(env, "db.db.scheme", "key", 0);
     sp_setstring(env, "db.db.scheme.key", "string_rev,key(0)", 0);

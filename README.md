@@ -101,6 +101,12 @@ where
 - value - name of key
 - 5 - sizeof(value) - in bytes
 
+
+#### quit
+
+quit\r\n - terminate session and close connection
+
+
 #### cursor
 ```
 get ?type=cursor&prefix=key&limit=1
@@ -128,10 +134,56 @@ r:100:123
 r:1000:1
 ```
 
-#### quit
+#### sophia
+You may access sophia api via memcache protocol.
 
-quit\r\n - terminate session and close connection
+Available methods: sp_setstring, sp_getstring, sp_setint, sp_getint
 
+Sintax
+
+- type=sophia
+- command=getstring[setstring,setint,getint]
+- key=some sophia key, list of keys: http://sophia.systems/v2.2/conf/sophia.html
+- value (for 'set' commands - int or string)
+
+Set command return 0 on success and -1 on error (you may find error in log or with key sophia.error)
+
+Get commands return int64_t or string
+
+Examples:
+```
+// get version
+get get ?type=sophia&command=getstring&key=sophia.version
+VALUE sophia.version 0 4
+2.2
+END
+// get status
+get ?type=sophia&command=getstring&key=sophia.status
+VALUE sophia.status 0 7
+online
+END
+// get last error
+get ?type=sophia&command=getstring&key=sophia.error
+VALUE sophia.error 0 60
+sophia/runtime/sr_conf.c:339 bad configuration path: status
+END
+// get index count
+get ?type=sophia&command=getint&key=db.db.index.count
+VALUE db.db.index.count 0 8
+34587306
+END
+// run backup
+get ?type=sophia&command=setint&key=backup.run&value=0
+VALUE backup.run 0 1
+0
+END
+// get last backup
+get ?type=sophia&command=getint&key=backup.last
+VALUE backup.last 0 1
+1
+END
+
+```
 
 ## http interface (in development)
 
