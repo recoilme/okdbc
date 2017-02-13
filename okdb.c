@@ -208,6 +208,7 @@ memcache_out(struct evbuffer *output, const char *key,const char *value, int siz
     snprintf(resp, resp_size,format,key,size,value);
     INFO("resp:'%.*s' resp_size:%d\n", resp_size,resp, resp_size);
     evbuffer_add(output, resp, resp_size-1);//remove \0
+    free(resp);
     return;
 }
 
