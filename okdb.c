@@ -12,7 +12,7 @@
 #include "sophia.h"
 
 #define MAX_QUERY_PARAM_CNT 4
-const int LOGENABLED = 0;
+const int LOGENABLED = 1;
 
 void *env;
 void *db;
@@ -443,10 +443,15 @@ CONTINUE_LOOP:;
             close_connection(bev, ctx, "Out of memory in key");
             return;
         }
-        INFO("get key:'%s'\n", key);
+        INFO("set key:'%s'\n", key);
 
+        /* Check for noreply */
+        char *noreply = strstr(data,"noreply");
+        
         /* Lets find value size */
-        char *command = make_str(data,cmd_len-(sizeof(nl)-1));
+        int minus = sizeof(nl)-1;
+        if (noreply) minus+=strlen("noreply")+1;
+        char *command = make_str(data,cmd_len-minus);
         INFO("command:'%s'\n",command);
         char *val_sizestr = strrchr(command, ' ');
         val_sizestr+=1;//' '
@@ -473,11 +478,13 @@ CONTINUE_LOOP:;
         sp_setstring(o, "key", &key[0], strlen(key));
         sp_setstring(o, "value", &value[0], val_size);
         int res = sp_set(db, o);
-        if (res == 0) {
-            evbuffer_add(output, st_stored, strlen(st_stored));
-        }
-        else {
-            evbuffer_add(output, st_notstored, strlen(st_notstored));
+        if (!noreply) {
+            if (res == 0) {
+                evbuffer_add(output, st_stored, strlen(st_stored));
+            }
+            else {
+                evbuffer_add(output, st_notstored, strlen(st_notstored));
+            }
         }
 
         /* command catched - send response */
