@@ -34,7 +34,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.3\r\n"
+    "Server: okdb/0.0.4\r\n"
     "\r\n%s";
 
 static char 
@@ -43,7 +43,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.3\r\n"
+    "Server: okdb/0.0.4\r\n"
     "\r\n%s";
 
 static char
@@ -243,13 +243,14 @@ get_val(struct evbuffer *output, const char *key, int is_http)
         INFO("processing");
         if (!strcmp("cursor",cmd.type)) {
             void *o = sp_document(db);
+            char *prefix = NULL;
             //int res = sp_setstring(o, "order", ">=", 0);
             if (cmd.prefix){
                 /* if prefix not set - will scan all db */
                 sp_setstring(o, "order", ">=", 0);
-                char *prefix = make_str(cmd.prefix,strlen(cmd.prefix));
+                prefix = make_str(cmd.prefix,strlen(cmd.prefix));
                 sp_setstring(o, "prefix", prefix, strlen(prefix));
-                free(prefix);
+                //free(prefix);
             }
             else {
                 sp_setstring(o, "order", ">=", 0);
@@ -275,6 +276,7 @@ get_val(struct evbuffer *output, const char *key, int is_http)
                 limit--;
             }
             sp_destroy(c);
+            if (prefix) free(prefix);
             if (is_http == 0) evbuffer_add(output, st_end, sizeof(st_end)-1);
             INFO("end cursor\n");
         }
@@ -727,10 +729,10 @@ init() {
 	sp_setstring(env, "sophia.path", "sophia", 0);
     sp_setstring(env, "backup.path", "sophia", 0);
 	sp_setstring(env, "db", "db", 0);
-    sp_setstring(env, "db.db.scheme", "key", 0);
-    sp_setstring(env, "db.db.scheme.key", "string,key(0)", 0);
-    sp_setstring(env, "db.db.scheme", "value", 0);
-    sp_setstring(env, "db.db.scheme.value", "string", 0);
+    //sp_setstring(env, "db.db.scheme", "key", 0);
+    //sp_setstring(env, "db.db.scheme.key", "string,key(0)", 0);
+    //sp_setstring(env, "db.db.scheme", "value", 0);
+    //sp_setstring(env, "db.db.scheme.value", "string", 0);
     /* set mmap mode */
 	sp_setint(env, "db.db.mmap", 1);
 	db = sp_getobject(env, "db.db");
