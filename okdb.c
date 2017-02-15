@@ -12,7 +12,7 @@
 #include "sophia.h"
 
 #define MAX_QUERY_PARAM_CNT 4
-const int LOGENABLED = 1;
+const int LOGENABLED = 0;
 
 void *env;
 void *db;
@@ -34,7 +34,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.2\r\n"
+    "Server: okdb/0.0.3\r\n"
     "\r\n%s";
 
 static char 
@@ -43,7 +43,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.2\r\n"
+    "Server: okdb/0.0.3\r\n"
     "\r\n%s";
 
 static char
@@ -725,10 +725,10 @@ init() {
 	/* open or create environment and database */
     env = sp_env();
 	sp_setstring(env, "sophia.path", "sophia", 0);
-    sp_setstring(env, "backup.path", "sophia/backup", 0);
+    sp_setstring(env, "backup.path", "sophia", 0);
 	sp_setstring(env, "db", "db", 0);
     sp_setstring(env, "db.db.scheme", "key", 0);
-    sp_setstring(env, "db.db.scheme.key", "string_rev,key(0)", 0);
+    sp_setstring(env, "db.db.scheme.key", "string,key(0)", 0);
     sp_setstring(env, "db.db.scheme", "value", 0);
     sp_setstring(env, "db.db.scheme.value", "string", 0);
     /* set mmap mode */
