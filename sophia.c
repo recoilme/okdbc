@@ -13730,11 +13730,11 @@ sf_limitapply(sflimit *b, sfscheme *s, sfv *fields, ssorder order)
 			break;
 		case SS_STRING:
 			if (order == SS_LT || order == SS_LTE) {
-				v->pointer = b->string_max;
-				v->size = b->string_max_size;
-			} else {
 				v->pointer = b->string_min;
 				v->size = b->string_min_size;
+			} else {
+				v->pointer = b->string_max;
+				v->size = b->string_max_size;
 			}
 			break;
 		default: assert(0);
@@ -13844,7 +13844,7 @@ sf_cmpstring(char *a, int asz, char *b, int bsz, void *arg ssunused)
 			return 0;
 		return (asz < bsz) ? -1 : 1;
 	}
-	return rc > 0 ? 1 : -1;
+	return rc > 0 ? -1 : 1;
 }
 
 static inline sshot int
