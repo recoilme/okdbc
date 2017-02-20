@@ -13,7 +13,13 @@
 #include "sophia.h"
 
 #define MAX_QUERY_PARAM_CNT 4
-const int LOGENABLED = 0;
+
+/* Config server */
+static struct config {
+    int hostport;
+    int debug;
+} config;
+
 
 struct event_base *base;
 
@@ -21,19 +27,14 @@ void *env;
 void *db;
 
 #define INFO(...) {\
-	if (LOGENABLED == 1) printf("\n%s:%d: %s():\t", __FILE__, __LINE__, __FUNCTION__);\
-	if (LOGENABLED == 1) printf(__VA_ARGS__);\
+	if (config.debug == 1) printf("\n%s:%d: %s():\t", __FILE__, __LINE__, __FUNCTION__);\
+	if (config.debug == 1) printf(__VA_ARGS__);\
 }
 
 #define ERROR(...) {\
 	printf("\n%s:%d: %s():\t", __FILE__, __LINE__, __FUNCTION__);\
 	printf(__VA_ARGS__);\
 }
-
-/* Config server */
-static struct config {
-    int hostport;
-} config;
 
 /* Signal handler function (defined below). */
 static void sighandler(int signal);
@@ -695,6 +696,9 @@ run_server()
         ERROR("Invalid port");
         return 1;
     }
+    else {
+        printf("Starting on port:%d\n",config.hostport);
+    }
 
     /* Set signal handlers */
     sigset_t sigset;
@@ -734,7 +738,6 @@ run_server()
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
     event_base_dispatch(base);
-    puts("Terminated");
     return 0;
 }
 
@@ -760,21 +763,22 @@ void parseOptions(int argc, char **argv) {
     /* Simple params - only port defined like okdb 11213 */
     if (argc == 2) {
         config.hostport = atoi(argv[1]);
+        return;
     }
-    return;
     int i;
 
     for (i = 1; i < argc; i++) {
         int lastarg = i==argc-1;
-        
         if (!strcmp(argv[i],"-p") && !lastarg) {
             config.hostport = atoi(argv[i+1]);
             i++;
+        } else if (!strcmp(argv[i],"-D")) {
+            config.debug = 1;
         } else {
             printf("Wrong option '%s' or option argument missing\n\n",argv[i]);
             printf("Usage: okdb [-h <host>] [-p <port>] \n\n");
             printf(" -h <hostname>      Server hostname (default 127.0.0.1)\n");
-            printf(" -p <port>      Server port (default 11213)\n");
+            printf(" -p <port>          Server port (default 11213)\n");
             printf(" -D                 Debug mode. more verbose.\n");
             exit(1);
         }
@@ -812,6 +816,7 @@ main(int argc, char **argv)
 {
     /* Default server params */
     config.hostport = 11213;
+    config.debug = 0;
 
     parseOptions(argc,argv);
 
