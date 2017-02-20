@@ -32,8 +32,11 @@ git clone https://github.com/recoilme/okdb.git
 cd okdb
 make build
 ./okdb 
-with custom port (default 11213):
+simplified, with custom port (default 11213):
 ./okdb 9876 >> error.log &
+or with full list custom params:
+./okdb -p 9876 -D -sophia.path ~/tmp2 -backup.path ~/tmp22
+(start on port 9876, with debug log, with sophiadb in folder ~/tmp2 & backup folder ~/tmp22)
 ```
 
 ## run

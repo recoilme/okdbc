@@ -18,6 +18,8 @@
 static struct config {
     int hostport;
     int debug;
+    char *sophia_path;
+    char *backup_path;
 } config;
 
 
@@ -746,8 +748,9 @@ static int
 init() {
 	/* open or create environment and database */
     env = sp_env();
-	sp_setstring(env, "sophia.path", "sophia", 0);
-    sp_setstring(env, "backup.path", "sophia", 0);
+	sp_setstring(env, "sophia.path", config.sophia_path, 0);
+    sp_setstring(env, "backup.path", config.backup_path, 0);
+    /* Database name - hardcoded now */
 	sp_setstring(env, "db", "db", 0);
     //sp_setstring(env, "db.db.scheme", "key", 0);
     //sp_setstring(env, "db.db.scheme.key", "string,key(0)", 0);
@@ -759,7 +762,8 @@ init() {
     return sp_open(env);
 }
 
-void parseOptions(int argc, char **argv) {
+void
+parseOptions(int argc, char **argv) {
     /* Simple params - only port defined like okdb 11213 */
     if (argc == 2) {
         config.hostport = atoi(argv[1]);
@@ -772,14 +776,22 @@ void parseOptions(int argc, char **argv) {
         if (!strcmp(argv[i],"-p") && !lastarg) {
             config.hostport = atoi(argv[i+1]);
             i++;
+        } else if (!strcmp(argv[i],"-sophia.path") && !lastarg) {
+            config.sophia_path = make_str(argv[i+1],strlen(argv[i+1]));
+            i++;
+        } else if (!strcmp(argv[i],"-backup.path") && !lastarg) {
+            config.backup_path = make_str(argv[i+1],strlen(argv[i+1]));
+            i++;
         } else if (!strcmp(argv[i],"-D")) {
             config.debug = 1;
         } else {
             printf("Wrong option '%s' or option argument missing\n\n",argv[i]);
-            printf("Usage: okdb [-h <host>] [-p <port>] \n\n");
-            printf(" -h <hostname>      Server hostname (default 127.0.0.1)\n");
-            printf(" -p <port>          Server port (default 11213)\n");
-            printf(" -D                 Debug mode. more verbose.\n");
+            printf("Usage: okdb [-p <port>] [-sophia.path <sophia.path>] [-backup.path <backup.path>] [-D] \n\n");
+            //printf(" -h <hostname>              Server hostname (default 127.0.0.1)\n");
+            printf(" -p <port>                  Server port (default 11213)\n");
+            printf(" -sophia.path <sophia.path> Sophia path (default sophia)\n");
+            printf(" -backup.path <backup.path> Sophia backup path (default sophia)\n");
+            printf(" -D                         Debug mode. more verbose.\n");
             exit(1);
         }
     }
@@ -808,7 +820,7 @@ sighandler(int signal) {
 static void
 test()
 {
-	
+	/* Place for internal tests */
 }
 
 int
@@ -817,6 +829,8 @@ main(int argc, char **argv)
     /* Default server params */
     config.hostport = 11213;
     config.debug = 0;
+    config.sophia_path = make_str("sophia",strlen("sophia"));
+    config.backup_path = make_str("sophia",strlen("sophia"));
 
     parseOptions(argc,argv);
 
