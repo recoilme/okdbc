@@ -8,11 +8,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <signal.h>
 
 #include "sophia.h"
 
 #define MAX_QUERY_PARAM_CNT 4
 const int LOGENABLED = 0;
+
+struct event_base *base;
 
 void *env;
 void *db;
@@ -27,6 +30,14 @@ void *db;
 	printf(__VA_ARGS__);\
 }
 
+/* Config server */
+static struct config {
+    int hostport;
+} config;
+
+/* Signal handler function (defined below). */
+static void sighandler(int signal);
+
 static char 
 *msg_ok =
     "HTTP/1.1 200 OK\r\n"
@@ -34,7 +45,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.5\r\n"
+    "Server: okdb/0.0.6\r\n"
     "\r\n%s";
 
 static char 
@@ -43,7 +54,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.5\r\n"
+    "Server: okdb/0.0.6\r\n"
     "\r\n%s";
 
 static char
@@ -675,25 +686,30 @@ accept_error_cb(struct evconnlistener *listener, void *ctx)
 }
 
 static int
-run_server(int argc, char **argv)
+run_server()
 {
-    struct event_base *base;
     struct evconnlistener *listener;
     struct sockaddr_in sin;
 
-    int port = 11213;
-
-    if (argc > 1) {
-        port = atoi(argv[1]);
-    }
-    if (port<=0 || port>65535) {
-        puts("Invalid port");
+    if (config.hostport<=0 || config.hostport>65535) {
+        ERROR("Invalid port");
         return 1;
     }
 
+    /* Set signal handlers */
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    struct sigaction siginfo = {
+        .sa_handler = sighandler,
+        .sa_mask = sigset,
+        .sa_flags = SA_RESTART,
+    };
+    sigaction(SIGINT, &siginfo, NULL);
+    sigaction(SIGTERM, &siginfo, NULL);
+
     base = event_base_new();
     if (!base) {
-        puts("Couldn't open event base");
+        ERROR("Couldn't open event base");
         return 1;
     }
 
@@ -705,7 +721,7 @@ run_server(int argc, char **argv)
     /* Listen on 0.0.0.0 */
     sin.sin_addr.s_addr = htonl(0);
     /* Listen on the given port. */
-    sin.sin_port = htons(port);
+    sin.sin_port = htons(config.hostport);
 
     listener = evconnlistener_new_bind(base, accept_conn_cb, NULL,
         LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
@@ -718,6 +734,7 @@ run_server(int argc, char **argv)
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
     event_base_dispatch(base);
+    puts("Terminated");
     return 0;
 }
 
@@ -739,6 +756,51 @@ init() {
     return sp_open(env);
 }
 
+void parseOptions(int argc, char **argv) {
+    /* Simple params - only port defined like okdb 11213 */
+    if (argc == 2) {
+        config.hostport = atoi(argv[1]);
+    }
+    return;
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        int lastarg = i==argc-1;
+        
+        if (!strcmp(argv[i],"-p") && !lastarg) {
+            config.hostport = atoi(argv[i+1]);
+            i++;
+        } else {
+            printf("Wrong option '%s' or option argument missing\n\n",argv[i]);
+            printf("Usage: okdb [-h <host>] [-p <port>] \n\n");
+            printf(" -h <hostname>      Server hostname (default 127.0.0.1)\n");
+            printf(" -p <port>      Server port (default 11213)\n");
+            printf(" -D                 Debug mode. more verbose.\n");
+            exit(1);
+        }
+    }
+}
+
+/**
+ * Kill the server.  This function can be called from another thread to kill
+ * the server, causing runServer() to return.
+ */
+void 
+killServer(void) {
+    fprintf(stdout, "Stopping socket listener event loop.\n");
+    if (event_base_loopexit(base, NULL)) {
+        perror("Error shutting down server");
+    }
+    fprintf(stdout, "Stopping Sophia Env.\n");
+}
+
+static void 
+sighandler(int signal) {
+    fprintf(stdout, "Received signal %d: %s.  Shutting down.\n", signal,
+            strsignal(signal));
+    killServer();
+}
+
 static void
 test()
 {
@@ -748,14 +810,21 @@ test()
 int
 main(int argc, char **argv)
 {
+    /* Default server params */
+    config.hostport = 11213;
+
+    parseOptions(argc,argv);
+
 	test();
 	if (init() == -1)
 		goto error;
 
-    run_server(argc, argv);
+    run_server();
 
     /* finish work */
+    
 	sp_destroy(env);
+    fprintf(stdout, "Stopped Sophia Env.\n");
     return 0;
 error:;
 	int size;
