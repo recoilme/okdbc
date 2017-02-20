@@ -22,9 +22,11 @@ static struct config {
     char *backup_path;
 } config;
 
-
+/* evbase for handling shutdown */
 struct event_base *base;
+int backup_active;
 
+/* Sophia params */
 void *env;
 void *db;
 
@@ -328,10 +330,18 @@ get_val(struct evbuffer *output, const char *key, int is_http)
             if (!strcmp("setint",cmd.command)) {
                 /* ?type=sophia&command=setint&key=backup.run&value=0 */
                 char *new_key = make_str(cmd.key,strlen(cmd.key));
-                if (new_key) {                      
+                if (new_key) {
+                    if (!strcmp("backup.run",new_key)) {
+                        /* Make db readonly on backup */
+                        backup_active = 1;
+                    }                      
                     int64_t val = cmd.value?strtol(cmd.value,NULL,10):0;
                     int result = sp_setint(env,new_key,val);
-                    if (result == -1) print_error();
+                    if (result == -1) {
+                        /* Return to write state on error */
+                        backup_active = 0;
+                        print_error();
+                    }
                     char buf[128];
                     memset(buf, 0x00, 128);
                     sprintf(buf, "%d", result);
@@ -490,18 +500,30 @@ CONTINUE_LOOP:;
         INFO("value:'%s'\n",value);
 
         /* Processing key/value */
-        void *o = sp_document(db);
-        sp_setstring(o, "key", &key[0], strlen(key));
-        sp_setstring(o, "value", &value[0], val_size);
-        int res = sp_set(db, o);
-        if (!noreply) {
-            if (res == 0) {
-                evbuffer_add(output, st_stored, strlen(st_stored));
-            }
-            else {
-                evbuffer_add(output, st_notstored, strlen(st_notstored));
+        if (backup_active > 0) {
+            /* Backup running - drain buffer and continue until it finished */
+            /* Check is backup running? and update status */
+            backup_active = (int) sp_getint(env,"backup.active");
+        }
+        if (backup_active > 0) {
+            /* Skip this command before backup completed */
+            evbuffer_add(output, st_notstored, strlen(st_notstored));
+        }
+        else {
+            void *o = sp_document(db);
+            sp_setstring(o, "key", &key[0], strlen(key));
+            sp_setstring(o, "value", &value[0], val_size);
+            int res = sp_set(db, o);
+            if (!noreply) {
+                if (res == 0) {
+                    evbuffer_add(output, st_stored, strlen(st_stored));
+                }
+                else {
+                    evbuffer_add(output, st_notstored, strlen(st_notstored));
+                }
             }
         }
+        
 
         /* command catched - send response */
         if (bufferevent_write_buffer(bev, output)) {
