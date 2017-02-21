@@ -1,6 +1,7 @@
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
+#include <event.h>
 
 #include <arpa/inet.h>
 
@@ -17,10 +18,14 @@
 
 /* Config server */
 static struct config {
-    int hostport;
-    int debug;
-    char *sophia_path;
-    char *backup_path;
+    int     hostport;
+    int     debug;
+    char    *subhost;
+    int     subport;
+    struct sockaddr_in  subaddr;
+    int     subfd;
+    char    *sophia_path;
+    char    *backup_path;
 } config;
 
 /* evbase for handling shutdown */
@@ -518,6 +523,12 @@ CONTINUE_LOOP:;
             if (!noreply) {
                 if (res == 0) {
                     evbuffer_add(output, st_stored, strlen(st_stored));
+                    if (config.subfd > 0) {
+                        /* Send message to subscriber */
+                        INFO("Send set 2 sub");
+                        sendto(config.subfd, "secret_message", strlen("secret_message"), 0, 
+                            (struct sockaddr*)&config.subaddr, sizeof config.subaddr);
+                    }
                 }
                 else {
                     evbuffer_add(output, st_notstored, strlen(st_notstored));
@@ -711,11 +722,76 @@ accept_error_cb(struct evconnlistener *listener, void *ctx)
     event_base_loopexit(base, NULL);
 }
 
+void 
+udp_read_cb(int fd, short event, void *arg) {
+    char                buf[1024];
+    int                 len;
+    int                 size = sizeof(struct sockaddr);
+    struct sockaddr_in  client_addr;
+    printf("cb");
+    memset(buf, 0, sizeof(buf));
+    len = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr *)&client_addr, &size);
+ 
+    if (len == -1) {
+        perror("recvfrom()");
+    } else if (len == 0) {
+        INFO("Connection Closed\n");
+    } else {
+        INFO("Read: len [%d] - content [%s]\n", len, buf);
+         
+        /* Echo */
+        sendto(fd, buf, len, 0, (struct sockaddr *)&client_addr, size);
+    }
+}
+
+int 
+bind_socket(struct event *ev) {
+    int                 sock_fd;
+    int                 flag = 1;
+    struct sockaddr_in  sin;
+ 
+    /* Create endpoint */
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("socket()");
+        return -1;
+    }
+ 
+    /* Set socket option */
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(int)) < 0) {
+        perror("setsockopt()");
+        return 1;
+    }
+ 
+    /* Set IP, port */
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+    sin.sin_port = htons(10001);
+ 
+    /* Bind */
+    if (bind(sock_fd, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0) {
+        perror("bind()");
+        return -1;
+    } else {
+        printf("bind() success - [%s] [%u]\n", "127.0.0.1", 10001);
+    }
+ 
+    /* Init one event and add to active events */
+    
+    event_set(ev, sock_fd, EV_READ | EV_PERSIST, &udp_read_cb, NULL);
+    if (event_add(ev, NULL) == -1) {
+        printf("event_add() failed\n");
+    }
+ 
+    return 0;
+}
+
 static int
 run_server()
 {
     struct evconnlistener *listener;
     struct sockaddr_in sin;
+    struct event  ev;
 
     if (config.hostport<=0 || config.hostport>65535) {
         ERROR("Invalid port");
@@ -762,7 +838,48 @@ run_server()
 	printf("%s",ok);
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
+    /* Udp server listener */
+    /* Init. event 
+    if (event_init() == NULL) {
+        printf("event_init() failed\n");
+        return -1;
+    }*/
+    /* Bind socket 
+    if (bind_socket(&ev) != 0) {
+        printf("bind_socket() failed\n");
+        return -1;
+    }
+    event_dispatch();*/
+    /* End of udp server */
+
+    /* Subscriber */
+    printf("subhost %s\n",config.subhost);
+    printf("subport %d\n",config.subport);
+    if (config.subport > 0 && config.subhost!=NULL) {
+        int flag = 1;
+        /* Create endpoint */
+        if ((config.subfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("Subscriber");
+            return -1;
+        }
+    
+        /* Set socket option */
+        if (setsockopt(config.subfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(int)) < 0) {
+            perror("Subscriber setsockopt()");
+            return 1;
+        }
+        /* Set IP, port */
+        memset(&config.subaddr, 0, sizeof(config.subaddr));
+        config.subaddr.sin_family = AF_INET;
+        config.subaddr.sin_addr.s_addr = inet_addr(config.subhost);
+        config.subaddr.sin_port = htons(config.subport);
+
+        INFO("Subscriber fd:%d",config.subfd);
+
+    }
+
     event_base_dispatch(base);
+
     return 0;
 }
 
@@ -805,6 +922,12 @@ parseOptions(int argc, char **argv) {
         } else if (!strcmp(argv[i],"-backup.path") && !lastarg) {
             config.backup_path = make_str(argv[i+1],strlen(argv[i+1]));
             i++;
+        } else if (!strcmp(argv[i],"-subhost") && !lastarg) {
+            config.subhost = make_str(argv[i+1],strlen(argv[i+1]));
+            i++;
+        } else if (!strcmp(argv[i],"-subport") && !lastarg) {
+            config.subport = atoi(argv[i+1]);
+            i++;
         } else if (!strcmp(argv[i],"-D")) {
             config.debug = 1;
         } else {
@@ -814,6 +937,8 @@ parseOptions(int argc, char **argv) {
             printf(" -p <port>                  Server port (default 11213)\n");
             printf(" -sophia.path <sophia.path> Sophia path (default sophia)\n");
             printf(" -backup.path <backup.path> Sophia backup path (default sophia)\n");
+            printf(" -subhost <ip address>      Replication address(default NULL)\n");
+            printf(" -subport <port>            Replication port(default 0)\n");
             printf(" -D                         Debug mode. more verbose.\n");
             exit(1);
         }
@@ -829,6 +954,11 @@ killServer(void) {
     fprintf(stdout, "Stopping socket listener event loop.\n");
     if (event_base_loopexit(base, NULL)) {
         perror("Error shutting down server");
+    }
+    if (config.subfd>0) {
+        if (event_loopexit(NULL)) {
+            perror("Error shutting down UDP server");
+        }
     }
     fprintf(stdout, "Stopping Sophia Env.\n");
 }
@@ -854,6 +984,9 @@ main(int argc, char **argv)
     config.debug = 0;
     config.sophia_path = make_str("sophia",strlen("sophia"));
     config.backup_path = make_str("sophia",strlen("sophia"));
+    config.subhost = NULL;
+    config.subport = 0;
+    config.subfd = 0;
 
     parseOptions(argc,argv);
 
