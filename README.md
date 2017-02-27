@@ -1,5 +1,5 @@
 # okdb
-A fast, light-weight key/value store with http & memcache interface.
+A fast, light-weight key/value store with http & memcache(TCP/UDP) interface.
 
 okdb implements a high-level cross-platform sockets interface to sophia db.
 
@@ -78,7 +78,7 @@ See demo
 
 #### set
 ```
-set [key] 0 0 [sizeof(value)]
+set [key] 0 0 [sizeof(value)] [noreply]
 value
 ```
 
@@ -87,6 +87,7 @@ where
 - key - must be a string without ?,\r,\n and so on simbols
 - 0 0 - reserved bytes
 - sizeof(value) - size of value in bytes (without zero terminate byte)
+- noreply - dont send reply
 - response: STORED\r\n or NOT_STORED\r\n
 
 #### get
@@ -214,6 +215,28 @@ Http send keep-Alive header
 Main page response is: 
 
 OK\r\n
+
+## UDP interface
+
+okdb support memcache protocol via udp
+
+## Replication
+
+You may set one replication database
+
+Master will send set commands to replica over udp protocol
+
+Example master config:
+```
+./okdb -p 11213 -subhost 127.0.0.1 -subport 11214 -D -sophia.path 1 -backup.path 1
+where:
+subhost 127.0.0.1 - replication ip
+subport 11214 - replication port
+```
+Example replication config:
+```
+./okdb -p 11214 -D -sophia.path 2 -backup.path 2
+```
 
 ## Test results
 

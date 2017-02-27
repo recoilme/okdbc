@@ -33,7 +33,8 @@ struct event *ev;
 /* Not store data on backup */
 int backup_active;
 /* Udp buf */
-struct evbuffer *udpbuffer;
+static struct evbuffer *udp_inbuf;
+static struct evbuffer *udp_outbuf;
 
 /* Sophia params */
 void *env;
@@ -59,7 +60,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.6\r\n"
+    "Server: okdb/0.0.7\r\n"
     "\r\n%s";
 
 static char 
@@ -68,7 +69,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.6\r\n"
+    "Server: okdb/0.0.7\r\n"
     "\r\n%s";
 
 static char
@@ -152,8 +153,8 @@ static void
 close_connection(struct bufferevent *bev, void *ctx, const char *err)
 {
     if (err) perror(err);
-    free(ctx);
-    bufferevent_free(bev);
+    if (ctx) free(ctx);
+    if (bev) bufferevent_free(bev);
 }
 
 static void
@@ -413,12 +414,9 @@ get_val(struct evbuffer *output, const char *key, int is_http)
 }
 
 static void
-read_cb(struct bufferevent *bev, void *ctx)
-{
-    /* This callback is invoked when there is data to read on bev. */
-    struct evbuffer *input = bufferevent_get_input(bev);
-    struct evbuffer *output = bufferevent_get_output(bev);
-
+read_buf(struct bufferevent *bev, void *ctx, struct evbuffer **input_ptr, struct evbuffer **output_ptr) {
+    struct evbuffer *input = *input_ptr;
+    struct evbuffer *output = *output_ptr;
 CONTINUE_LOOP:;
     /* Try copy from evbuffer to buffer */
     size_t len = evbuffer_get_length(input);
@@ -427,12 +425,13 @@ CONTINUE_LOOP:;
 
     /* Close connection if we dont may allocate buffer */
     if (!data) {
+        INFO("close_connection ");
         close_connection(bev, ctx, "Out of memory");
         return;
     }
 
     evbuffer_copyout(input, data, len);
-
+    INFO("buf data:[%s]\n",data);
     /* Process quit (maybe anywhere in buffer) */
     if (strstr(data,quit)) {
         INFO("quit catched!\n");
@@ -534,7 +533,7 @@ CONTINUE_LOOP:;
                         snprintf(msg, msg_size,format,key,val_size,value);
                         INFO("msg:'%.*s'\n", msg_size,msg);
                         
-                        sendto(config.subfd, msg, msg_size, 0, 
+                        sendto(config.subfd, msg, msg_size-1, 0, 
                             (struct sockaddr*)&config.subaddr, sizeof config.subaddr);
                         free(msg);
                     }
@@ -547,16 +546,16 @@ CONTINUE_LOOP:;
         }
         
 
-        /* command catched - send response */
+        /* command catched - send response 
         if (bufferevent_write_buffer(bev, output)) {
-            /* error sending - closed? */
+            // error sending - closed? 
             free(value);
             free(key);
             data-=cmd_len;//unshift
             free(data);
             close_connection(bev, ctx, "Error sending data to client");
             return;
-        }
+        }*/
         free(value);
         free(key);
         data-=cmd_len;//unshift
@@ -583,8 +582,10 @@ CONTINUE_LOOP:;
         }
         /* Find end command */
         char *cmdget_end = strstr(data,nl);
+        INFO("D[%s]",strstr(data,"\n"));
         if (!cmdget_end) {
             /* no end in buffer - wait it in next packet */
+            INFO("Dd");
             free(data);
             return; 
         }
@@ -613,14 +614,14 @@ CONTINUE_LOOP:;
         get_val(output, key, 0);
         size_t lenout = evbuffer_get_length(output);
         INFO("out%d\n",(int)lenout);
-        /* command catched - send response */
+        /* command catched - send response 
         if (bufferevent_write_buffer(bev, output)) {
             INFO("error send");
             free(key);
             free(data);
             close_connection(bev, ctx, "Error sending data to client");
             return;
-        }
+        }*/
         free(key);
         free(data);
         /* client may send multiple commands in one buffer so continue processing */
@@ -680,17 +681,37 @@ CONTINUE_LOOP:;
         }
         free(key);
 
-        /* command catched - send response */
+        /* command catched - send response 
         if (bufferevent_write_buffer(bev, output)) {
             free(data);
             close_connection(bev, ctx, "Error sending data to client");
             return;
-        }
+        }*/
         free(data);
         /* client may send multiple commands in one buffer so continue processing */
         goto CONTINUE_LOOP;
     }
+    INFO("read_buf3!\n");
     free(data);
+    INFO("read_buf4!\n");
+}
+
+static void
+read_cb(struct bufferevent *bev, void *ctx)
+{
+    /* This callback is invoked when there is data to read on bev. */
+    struct evbuffer *input = bufferevent_get_input(bev);
+    struct evbuffer *output = bufferevent_get_output(bev);
+
+    read_buf(bev, ctx, &input, &output);
+
+    if (evbuffer_get_length(output)>0) {
+        /* command catched - send response */
+        if (bufferevent_write_buffer(bev, output)) {
+            close_connection(bev, ctx, "Error sending data to client");
+            return;
+        }
+    }
 }
 
 static void
@@ -734,10 +755,11 @@ accept_error_cb(struct evconnlistener *listener, void *ctx)
 
 void 
 udp_read_cb(int fd, short event, void *arg) {
-    char                buf[1024];
+    char                buf[4096];
     int                 len;
     int                 size = sizeof(struct sockaddr);
     struct sockaddr_in  client_addr;
+    struct evbuffer *b = (struct evbuffer*) arg;
     INFO("UDP Connection\n");
     memset(buf, 0, sizeof(buf));
     len = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr *)&client_addr, &size);
@@ -746,11 +768,30 @@ udp_read_cb(int fd, short event, void *arg) {
         perror("recvfrom()");
     } else if (len == 0) {
         INFO("Connection Closed\n");
+        /* Drain input buf on close */
+        if (evbuffer_get_length(udp_inbuf)>0) {
+            evbuffer_drain(udp_inbuf, evbuffer_get_length(udp_inbuf));
+        }
+        
     } else {
+        int res = evbuffer_add(udp_inbuf, buf, len);
+        INFO("Add res:[%d]",res);
         INFO("Read: len [%d] - content [%s]\n", len, buf);
-         
-        /* Echo */
-        //sendto(fd, buf, len, 0, (struct sockaddr *)&client_addr, size);
+        INFO("udp_inbuf len:[%d]",evbuffer_get_length(udp_inbuf));
+        read_buf(NULL, NULL, &udp_inbuf, &udp_outbuf);
+
+        size_t len_out = evbuffer_get_length(udp_outbuf);
+        INFO("Buf out:[%d]",(int)len_out);
+        if (len_out>0) {
+            char *data = malloc(len_out+1);
+            if (!data) return;//oom
+            data[len_out] = '\0';
+            
+            /* command catched - send response */
+            evbuffer_remove(udp_outbuf, data, len_out);
+            sendto(fd, data, len_out, 0, (struct sockaddr *)&client_addr, size);
+            free(data);
+        }
     }
 }
 
@@ -790,7 +831,7 @@ bind_socket() {
     }
  
     /* Init one event and add to active events */
-    
+    //udp_inbuf = evbuffer_new();
     event_set(&ev, sock_fd, EV_READ | EV_PERSIST, &udp_read_cb, NULL);
     if (event_add(&ev, NULL) == -1) {
         printf("event_add() failed\n");
@@ -978,15 +1019,21 @@ sighandler(int signal) {
 }
 
 static void
+tstbuf()
+{
+    
+}
+
+static void
 test()
 {
-	/* Place for internal tests */
+	/* Place for internal tests 
     udpbuffer = evbuffer_new();
     evbuffer_add(udpbuffer, "123", 3);
     evbuffer_add(udpbuffer, "45", 2);
     char t[256];
     evbuffer_copyout(udpbuffer, t, 4);
-    printf("t [%s]",t);
+    printf("t [%s]",t);*/
 }
 
 int
@@ -1001,6 +1048,9 @@ main(int argc, char **argv)
     config.subport = 0;
     config.subfd = 0;
 
+    /* Udp buf */
+    udp_inbuf = evbuffer_new();
+    udp_outbuf = evbuffer_new();
 
     parseOptions(argc,argv);
 
