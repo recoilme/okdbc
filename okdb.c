@@ -757,7 +757,7 @@ void
 udp_read_cb(int fd, short event, void *arg) {
     char                buf[4096];
     int                 len;
-    int                 size = sizeof(struct sockaddr);
+    unsigned int        size = sizeof(struct sockaddr);
     struct sockaddr_in  client_addr;
     struct evbuffer *b = (struct evbuffer*) arg;
     INFO("UDP Connection\n");
@@ -777,7 +777,6 @@ udp_read_cb(int fd, short event, void *arg) {
         int res = evbuffer_add(udp_inbuf, buf, len);
         INFO("Add res:[%d]",res);
         INFO("Read: len [%d] - content [%s]\n", len, buf);
-        INFO("udp_inbuf len:[%d]",evbuffer_get_length(udp_inbuf));
         read_buf(NULL, NULL, &udp_inbuf, &udp_outbuf);
 
         size_t len_out = evbuffer_get_length(udp_outbuf);
