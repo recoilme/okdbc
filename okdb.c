@@ -60,7 +60,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.7\r\n"
+    "Server: okdb/0.0.8\r\n"
     "\r\n%s";
 
 static char 
@@ -69,7 +69,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.7\r\n"
+    "Server: okdb/0.0.8\r\n"
     "\r\n%s";
 
 static char
