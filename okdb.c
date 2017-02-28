@@ -37,8 +37,8 @@ static struct evbuffer *udp_inbuf;
 static struct evbuffer *udp_outbuf;
 
 /* Sophia params */
-void *env;
-void *db;
+static void *env;
+static void *db;
 
 #define INFO(...) {\
 	if (config.debug == 1) printf("\n%s:%d: %s():\t", __FILE__, __LINE__, __FUNCTION__);\
@@ -753,7 +753,7 @@ accept_error_cb(struct evconnlistener *listener, void *ctx)
     event_base_loopexit(base, NULL);
 }
 
-void 
+static void 
 udp_read_cb(int fd, short event, void *arg) {
     char                buf[4096];
     int                 len;
@@ -794,7 +794,7 @@ udp_read_cb(int fd, short event, void *arg) {
     }
 }
 
-int 
+static int 
 bind_socket() {
     int                 sock_fd;
     int                 flag = 1;
@@ -947,7 +947,7 @@ init() {
     return sp_open(env);
 }
 
-void
+static void
 parseOptions(int argc, char **argv) {
     /* Simple params - only port defined like okdb 11213 */
     if (argc == 2) {
@@ -994,7 +994,7 @@ parseOptions(int argc, char **argv) {
  * Kill the server.  This function can be called from another thread to kill
  * the server, causing runServer() to return.
  */
-void 
+static void 
 killServer(void) {
     fprintf(stdout, "Stopping socket listener event loop.\n");
     event_loopexit(NULL);
