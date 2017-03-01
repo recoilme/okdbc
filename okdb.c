@@ -142,7 +142,8 @@ make_str(const char *str, size_t len)
 }
 
 /* Must be positive */
-int get_int_len (int value)
+static int 
+get_int_len (int value)
 {
     int l=1;
     while(value>9){ l++; value/=10; }
@@ -198,11 +199,11 @@ parse_query(char *query, char delimiter, struct query_param *params, int max_par
 }
 
 static void
-http_out(struct evbuffer *output, const char *format, const char *msg, int size)
+http_out(struct evbuffer *output, const char *format, const char *msg, int size, int prepend)
 {
     //INFO("msg:%s",msg);
     if (!msg) return;
-    int resp_size = (strlen(format) -2*2/* % exclude */) + size + get_int_len(size)+1;
+    int resp_size = (strlen(format) -2*2/* % exclude */) + strlen(msg) + get_int_len(size)+1;
     //INFO("http_get_response size:%d", resp_size);        
     char *resp = malloc(resp_size);
     if (!resp) {
@@ -212,7 +213,13 @@ http_out(struct evbuffer *output, const char *format, const char *msg, int size)
     resp[resp_size-1] = '\0';
     snprintf(resp, resp_size, format, size, msg);
     //INFO("http_get_response:'%s' size:%d",resp, resp_size);
-    evbuffer_add(output, resp, resp_size-1);
+    if (prepend == 1) {
+        INFO("prepend [%s]",resp);
+        evbuffer_prepend(output, resp, resp_size-1);
+    }
+    else {
+        evbuffer_add(output, resp, resp_size-1);
+    }
     free(resp);
 }
 
@@ -396,14 +403,14 @@ get_val(struct evbuffer *output, const char *key, int is_http)
             memcache_out(output,key,value,value_size);
         }
         else {
-            http_out(output,msg_ok,value,value_size);
+            http_out(output,msg_ok,value,value_size,0);
         }
         INFO("val:'%.*s', size:%d\n", value_size,value,value_size);
         free(value);
     }
     else {
         if (is_http == 1){
-            http_out(output,msg_notfound,not_found,strlen(not_found));
+            http_out(output,msg_notfound,not_found,strlen(not_found),0);
         }
         INFO("key:'%s' not found\n",key);
     }
@@ -541,18 +548,7 @@ CONTINUE_LOOP:;
                 }
             }
         }
-        
 
-        /* command catched - send response 
-        if (bufferevent_write_buffer(bev, output)) {
-            // error sending - closed? 
-            free(value);
-            free(key);
-            data-=cmd_len;//unshift
-            free(data);
-            close_connection(bev, ctx, "Error sending data to client");
-            return;
-        }*/
         free(value);
         free(key);
         data-=cmd_len;//unshift
@@ -609,7 +605,6 @@ CONTINUE_LOOP:;
         char *token;
         token = strtok(key, " ");
         while(token) {
-            printf( "token: [%s] len:[%d]\n", token,strlen(token) );
             get_val(output, token, 0);
             token = strtok(NULL, " ");
         }
@@ -649,7 +644,7 @@ CONTINUE_LOOP:;
 
         /* extract key from buffer */
         data+=sizeof(http_get)-1;
-        /* Find ' ' or /r/n in buffer */
+        /* Find end */
         size_t key_end = strcspn(data, " \r\n");
         char *key = make_str(data, key_end);
         /* Move pointer back */
@@ -664,30 +659,34 @@ CONTINUE_LOOP:;
         INFO("key:'%s'\n", key);
         if (!strcmp("",key)) {
             INFO("Send 200 resp");
-            http_out(output,msg_ok,ok,strlen(ok));
+            http_out(output,msg_ok,ok,strlen(ok),0);
         }
         else {
             /* We have key in request */
             if (!strcmp("favicon.ico",key)) {
                 INFO("request:favicon.ico");
             }
-            get_val(output,key,1);
+            /* Processing keys */
+            struct evbuffer *tmp = evbuffer_new(); 
+            char *token;
+            token = strtok(key, "%20");
+            while(token) {
+                get_val(tmp, token, 0);
+                token = strtok(NULL, "%20");
+            }
+            evbuffer_add(tmp, st_end, sizeof(st_end)-1);
+            http_out(tmp,msg_ok,"",evbuffer_get_length(tmp),1);
+            //evbuffer_prepend_buffer(output,tmp);
+            evbuffer_add_buffer(output,tmp);
+            evbuffer_free(tmp);
         }
+        
         free(key);
-
-        /* command catched - send response 
-        if (bufferevent_write_buffer(bev, output)) {
-            free(data);
-            close_connection(bev, ctx, "Error sending data to client");
-            return;
-        }*/
         free(data);
         /* client may send multiple commands in one buffer so continue processing */
         goto CONTINUE_LOOP;
     }
-    INFO("read_buf3!\n");
     free(data);
-    INFO("read_buf4!\n");
 }
 
 static void
@@ -937,6 +936,7 @@ init() {
     //sp_setstring(env, "db.db.scheme.value", "string", 0);
     /* set mmap mode */
 	sp_setint(env, "db.db.mmap", 1);
+    sp_setint(env,"db.db.compaction.cache",419430400);//400Mb
 	db = sp_getobject(env, "db.db");
     return sp_open(env);
 }
