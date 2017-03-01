@@ -4,6 +4,6 @@ debug:
 build:
 	cc -O2 -DNDEBUG -pedantic -Wall -Wextra -o okdb okdb.c sophia.c -lpthread -levent -I/usr/local/include -L/usr/local/lib
 run: 
-	./okdb
+	./okdb -p 11213 -D
 kill:
 	-pkill okdb && -rm ./okdb

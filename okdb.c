@@ -60,7 +60,7 @@ static char
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
     "Keep-Alive: timeout=20, max=200\r\n"
-    "Server: okdb/0.0.8\r\n"
+    "Server: okdb/0.1.0\r\n"
     "\r\n%s";
 
 static char 
@@ -69,7 +69,7 @@ static char
     "Connection: close\r\n"
     "Content-Type: text/html; charset=UTF-8\r\n"
     "Content-Length: %d\r\n"
-    "Server: okdb/0.0.8\r\n"
+    "Server: okdb/0.1.0\r\n"
     "\r\n%s";
 
 static char
@@ -407,9 +407,6 @@ get_val(struct evbuffer *output, const char *key, int is_http)
         }
         INFO("key:'%s' not found\n",key);
     }
-    if (is_http == 0) {
-        evbuffer_add(output, st_end, sizeof(st_end)-1);
-    }
     return;
 }
 
@@ -582,10 +579,8 @@ CONTINUE_LOOP:;
         }
         /* Find end command */
         char *cmdget_end = strstr(data,nl);
-        INFO("D[%s]",strstr(data,"\n"));
         if (!cmdget_end) {
             /* no end in buffer - wait it in next packet */
-            INFO("Dd");
             free(data);
             return; 
         }
@@ -596,8 +591,8 @@ CONTINUE_LOOP:;
 
         /* extract key from buffer */
         data+=sizeof(cmd_get)-1;
-        /* Find ' ' or /r/n in buffer */
-        size_t key_end = strcspn(data, " \r\n");
+        /* Find /r/n in buffer */
+        size_t key_end = strcspn(data, "\r\n");
         char *key = make_str(data, key_end);
         /* Move pointer back */
         data-=sizeof(cmd_get)-1;
@@ -610,18 +605,17 @@ CONTINUE_LOOP:;
         }
         INFO("key:'%s'\n", key);
 
-        /* Processing key */
-        get_val(output, key, 0);
-        size_t lenout = evbuffer_get_length(output);
-        INFO("out%d\n",(int)lenout);
-        /* command catched - send response 
-        if (bufferevent_write_buffer(bev, output)) {
-            INFO("error send");
-            free(key);
-            free(data);
-            close_connection(bev, ctx, "Error sending data to client");
-            return;
-        }*/
+        /* Processing keys */
+        char *token;
+        token = strtok(key, " ");
+        while(token) {
+            printf( "token: [%s] len:[%d]\n", token,strlen(token) );
+            get_val(output, token, 0);
+            token = strtok(NULL, " ");
+        }
+
+        evbuffer_add(output, st_end, sizeof(st_end)-1);
+
         free(key);
         free(data);
         /* client may send multiple commands in one buffer so continue processing */
